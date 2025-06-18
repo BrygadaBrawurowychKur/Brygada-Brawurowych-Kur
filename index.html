@@ -1,0 +1,649 @@
+﻿<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Kogut kontra śmieciarze</title>
+    <style>
+        body {
+            background: #216038;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+        #main-wrap {
+            max-width: 760px;
+            margin: 30px auto 0 auto;
+        }
+        #gameCanvas {
+            display: block;
+            margin: 0 auto;
+            background: #b0bec5;
+            border: 4px solid #263238;
+        }
+        #game-info {
+            text-align: center;
+            margin: 16px 0 0 0;
+            font-size: 120%;
+            color: #fffde7;
+        }
+        #results {
+            text-align: center;
+            margin-top: 18px;
+        }
+        #desc {
+            margin: 22px 0 12px 0;
+            font-weight: bold;
+            text-align: center;
+            font-size: 1.18em;
+            color: #fffde7;
+        }
+        #instructions {
+            text-align: center;
+            margin: 0 0 20px 0;
+            color: #fffde7;
+        }
+        #newgame {
+            display: none;
+            margin: 20px auto 0 auto;
+            font-size: 1.1em;
+            background: #43a047;
+            color: white;
+            font-weight: bold;
+            border: none;
+            border-radius: 6px;
+            padding: 10px 32px;
+            cursor: pointer;
+            box-shadow: 0 2px 8px #21212133;
+        }
+        #newgame:hover {
+            background: #388e3c;
+        }
+    </style>
+</head>
+<body>
+<div id="main-wrap">
+    <h1 style="text-align:center;color:#fffde7;">Brygada Brawurowych Kur kontra śmieciarze</h1>
+    <div id="game-info"></div>
+    <canvas id="gameCanvas" width="700" height="500"></canvas>
+    <div id="desc">
+        Miasto zostało opanowane przez złych śmieciarzy i pokonać ich może tylko załoga kurzego patrolu, na którego czele stoi kapitan Strzała!
+    </div>
+    <div id="instructions">
+        <b>Instrukcja gry:</b><br>
+        Steruj kurą (strzałki lewo/prawo).<br>
+        Strzelaj spacją do śmieci.<br>
+        Punkty: butelka – 3 pkt, reszta – 1 pkt.<br>
+        Masz 60 sekund! Powodzenia, kapitanie Strzało!
+    </div>
+    <button id="newgame">Nowa gra</button>
+    <div id="results"></div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+    // --- PARAMETRY PLANSZY I ULIC
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const streetWidth = 80;
+    const sidewalkWidth = 20;
+    const streetColor = '#757575';
+    const sidewalkColor = '#d7ccc8';
+    const grassColor = '#a5d6a7';
+    const buildingColor = '#ffcc80';
+
+    const horizontalStreets = [100, 250, 400];
+    const bottomStreetY = horizontalStreets[2];
+
+    // Budynki (tylko górne), dolne zastąpione drzewami/krzakami
+    const buildings = [
+        {x: 30, y: 30, w: 120, h: 55},
+        {x: 300, y: 30, w: 110, h: 65},
+        {x: 560, y: 30, w: 110, h: 70}
+    ];
+
+    // Drzewa i krzaki
+    const trees = [
+        {x: 100, y: 340, size: 46, type: "tree"},
+        {x: 170, y: 410, size: 35, type: "bush"},
+        {x: 600, y: 350, size: 44, type: "tree"},
+        {x: 655, y: 420, size: 40, type: "bush"}
+    ];
+
+    // Kogut
+    let rooster = {
+        x: 350,
+        y: bottomStreetY + streetWidth / 2,
+        size: 32,
+        speed: 7
+    };
+
+    // Pociski
+    let bullets = [];
+
+    // Typy ludzików (zielony to specjalny)
+    const peopleTypes = [
+        {skin: "#ffe082", shirt: "#90caf9", hair: "#6d4c41"},
+        {skin: "#ffccbc", shirt: "#ce93d8", hair: "#263238"},
+        {skin: "#fff9c4", shirt: "#a5d6a7", hair: "#ff7043"},
+        {skin: "#ffe082", shirt: "#f48fb1", hair: "#212121"},
+        {skin: "#ffecb3", shirt: "#80cbc4", hair: "#5d4037"},
+        {skin: "#e0ffd4", shirt: "#43a047", hair: "#2e7d32"} // zielony – specjalny
+    ];
+
+    // Ludziki na jezdniach (poziome ruchy, inne śmieci niż butelki)
+    let people;
+    function resetPeople() {
+        people = [
+            {x: 120, y: 100 + streetWidth / 2, dir: 'right', speed: 1.1, type: 0, timer: 0, trash: null, street: 0},
+            {x: 600, y: 100 + streetWidth / 2, dir: 'left', speed: 1.05, type: 1, timer: 80, trash: null, street: 0},
+            {x: 350, y: 100 + streetWidth / 2, dir: 'right', speed: 0.9, type: 2, timer: 120, trash: null, street: 0},
+            {x: 140, y: 250 + streetWidth / 2, dir: 'right', speed: 1.2, type: 3, timer: 0, trash: null, street: 1},
+            {x: 520, y: 250 + streetWidth / 2, dir: 'left', speed: 1.15, type: 4, timer: 170, trash: null, street: 1},
+            {x: 350, y: 250 + streetWidth / 2, dir: 'right', speed: 1.0, type: 1, timer: 210, trash: null, street: 1}
+        ];
+    }
+    resetPeople();
+
+    // Specjalny zielony śmieciarz – zygzak górna część planszy, zostawia tylko butelki
+    let grassGuy;
+    function resetGrassGuy() {
+        // Start gdzieś w górnej części planszy, losowy X i Y
+        let possibleYs = [horizontalStreets[0]+streetWidth/2, horizontalStreets[1]+streetWidth/2];
+        let y = possibleYs[Math.floor(Math.random()*possibleYs.length)];
+        let x = 100 + Math.random()*(canvas.width-200);
+        // Ruch: losowy kierunek
+        let dirs = [
+            {dx: 1, dy: 0},   // prawo
+            {dx: -1, dy: 0},  // lewo
+            {dx: 0, dy: 1},   // dół
+            {dx: 0, dy: -1},  // góra
+            {dx: 0.7, dy: 0.7},   // skosy
+            {dx: -0.7, dy: -0.7},
+            {dx: 0.7, dy: -0.7},
+            {dx: -0.7, dy: 0.7}
+        ];
+        let dir = dirs[Math.floor(Math.random()*dirs.length)];
+        grassGuy = {
+            x: x,
+            y: y,
+            dir: dir,
+            speed: 1.35,
+            type: 5,
+            timer: 0,
+            trash: null,
+            changeDirTimer: 0
+        };
+    }
+    resetGrassGuy();
+
+    // Śmieci (0=gazeta, 1=banan, 2=butelka, 3=puszka)
+    function randomTrashType(exclude) {
+        // exclude=[n] – nie losuj danego typu
+        let arr = [0,1,3];
+        if (exclude) arr = arr.filter(x=>x!==exclude);
+        return arr[Math.floor(Math.random()*arr.length)];
+    }
+    let trashes = [];
+
+    // Punktacja i czas
+    let score = 0;
+    let timeLeft = 60;
+    let gameActive = true;
+    let results = JSON.parse(localStorage.getItem('rooster_scores') || '[]');
+
+    // Klawisze sterowania
+    let keys = {};
+
+    // Rysowanie planszy
+    function drawCity() {
+        ctx.fillStyle = grassColor;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = streetColor;
+        horizontalStreets.forEach(y => {
+            ctx.fillRect(0, y, canvas.width, streetWidth);
+        });
+
+        ctx.fillStyle = sidewalkColor;
+        horizontalStreets.forEach(y => {
+            ctx.fillRect(0, y - sidewalkWidth, canvas.width, sidewalkWidth);
+            ctx.fillRect(0, y + streetWidth, canvas.width, sidewalkWidth);
+        });
+
+        buildings.forEach(b => {
+            ctx.fillStyle = buildingColor;
+            ctx.fillRect(b.x, b.y, b.w, b.h);
+            ctx.strokeStyle = "#8d6e63";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(b.x, b.y, b.w, b.h);
+            ctx.fillStyle = "#bcaaa4";
+            ctx.fillRect(b.x, b.y, b.w, 10);
+            for(let i=0; i<Math.floor(b.h/25); i++) {
+                for(let j=0; j<Math.floor(b.w/28); j++) {
+                    ctx.fillStyle = "#fffde7";
+                    ctx.fillRect(b.x+8+j*28, b.y+15+i*25, 16, 13);
+                }
+            }
+        });
+
+        trees.forEach(t => {
+            ctx.save();
+            ctx.translate(t.x, t.y);
+            if (t.type === "tree") {
+                ctx.fillStyle = "#8d6e63";
+                ctx.fillRect(-6, t.size*0.65, 12, t.size*0.40);
+                ctx.beginPath();
+                ctx.arc(0, t.size*0.5, t.size*0.50, 0, 2*Math.PI);
+                ctx.fillStyle = "#388e3c";
+                ctx.globalAlpha = 0.90;
+                ctx.fill();
+            } else {
+                ctx.beginPath();
+                ctx.ellipse(0, t.size*0.7, t.size*0.7, t.size*0.38, 0, 0, 2*Math.PI);
+                ctx.fillStyle = "#4caf50";
+                ctx.globalAlpha = 0.8;
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1.0;
+            ctx.restore();
+        });
+    }
+
+    // Grafika koguta
+    function drawRooster() {
+        const {x, y, size} = rooster;
+        ctx.save();
+        ctx.translate(x, y);
+
+        ctx.fillStyle = "#e57373";
+        ctx.beginPath();
+        ctx.ellipse(0, 0, size, size*0.75, 0, 0, 2*Math.PI); ctx.fill();
+
+        ctx.fillStyle = "#fff";
+        ctx.beginPath();
+        ctx.ellipse(0, -size*0.45, size*0.38, size*0.23, 0, 0, 2*Math.PI); ctx.fill();
+
+        ctx.fillStyle = "#fffde7";
+        ctx.beginPath();
+        ctx.arc(size*0.55, -size*0.32, size*0.43, 0, 2 * Math.PI);
+        ctx.fill();
+
+        ctx.fillStyle = "#d32f2f";
+        ctx.beginPath();
+        ctx.arc(size*0.53, -size*0.62, size*0.18, 0, Math.PI*2);
+        ctx.arc(size*0.68, -size*0.66, size*0.13, 0, Math.PI*2);
+        ctx.arc(size*0.76, -size*0.54, size*0.10, 0, Math.PI*2);
+        ctx.fill();
+
+        ctx.fillStyle = "#ffb300";
+        ctx.beginPath();
+        ctx.moveTo(size*0.98, -size*0.25);
+        ctx.lineTo(size*1.15, -size*0.30);
+        ctx.lineTo(size*0.98, -size*0.10);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = "#263238";
+        ctx.beginPath();
+        ctx.arc(size*0.80, -size*0.37, 3, 0, 2 * Math.PI);
+        ctx.fill();
+
+        ctx.fillStyle = "#d32f2f";
+        ctx.beginPath();
+        ctx.arc(size*0.75, -size*0.12, size*0.12, 0, Math.PI*2);
+        ctx.arc(size*0.90, -size*0.15, size*0.08, 0, Math.PI*2);
+        ctx.fill();
+
+        ctx.save();
+        ctx.rotate(-0.45);
+        ctx.fillStyle = "#b71c1c";
+        ctx.beginPath();
+        ctx.ellipse(-size*0.12, size*0.2, size*0.32, size*0.18, 0, 0, Math.PI*2);
+        ctx.fill();
+        ctx.restore();
+
+        ctx.save();
+        ctx.rotate(0.85);
+        ctx.strokeStyle = "#616161";
+        ctx.lineWidth = 7;
+        ctx.beginPath();
+        ctx.arc(-size*0.70, size*0.08, size*0.7, Math.PI*1.1, Math.PI*1.7, false);
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.fillStyle = "#616161";
+        ctx.fillRect(-8, -size*0.9, 16, size*0.55);
+
+        ctx.beginPath();
+        ctx.arc(-size*0.22, 0, 7, 0, 2 * Math.PI);
+        ctx.fillStyle = "#ffd600";
+        ctx.fill();
+
+        ctx.restore();
+    }
+
+    // Wygląd ludzików
+    function drawPerson(person) {
+        const {x, y, type} = person;
+        const t = peopleTypes[type];
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.fillStyle = t.shirt;
+        ctx.fillRect(-10, 0, 20, 28);
+        ctx.fillStyle = t.skin;
+        ctx.beginPath();
+        ctx.arc(0, -10, 12, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.fillStyle = t.hair;
+        ctx.beginPath();
+        ctx.arc(0, -14, 11, Math.PI, 2*Math.PI);
+        ctx.fill();
+        ctx.strokeStyle = "#263238";
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(-5, 28); ctx.lineTo(-5, 38);
+        ctx.moveTo(5, 28); ctx.lineTo(5, 38);
+        ctx.stroke();
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-10, 10); ctx.lineTo(-18, 24);
+        ctx.moveTo(10, 10); ctx.lineTo(18, 24);
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    // Wygląd śmieci
+    function drawTrash(trash) {
+        ctx.save();
+        ctx.translate(trash.x, trash.y);
+        switch (trash.type) {
+            case 0: // Gazeta
+                ctx.fillStyle = "#eee";
+                ctx.beginPath();
+                ctx.moveTo(-13, 3); ctx.lineTo(10, -2); ctx.lineTo(12, 11); ctx.lineTo(-7, 16); ctx.closePath();
+                ctx.fill();
+                ctx.strokeStyle = "#bdbdbd";
+                ctx.stroke();
+                ctx.strokeStyle = "#888";
+                ctx.beginPath();
+                ctx.moveTo(-5, 5); ctx.lineTo(7, 2);
+                ctx.moveTo(-6, 10); ctx.lineTo(6, 9);
+                ctx.stroke();
+                break;
+            case 1: // Banan
+                ctx.strokeStyle = "#e2b700";
+                ctx.lineWidth = 5;
+                ctx.beginPath();
+                ctx.moveTo(-6, 11); ctx.bezierCurveTo(-10,0,9,-11,13,2); ctx.stroke();
+                ctx.strokeStyle = "#c6a700";
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(-3, 13); ctx.bezierCurveTo(2,10,7,5,10,10); ctx.stroke();
+                break;
+            case 2: // Butelka
+                ctx.fillStyle = "#90caf9";
+                ctx.beginPath();
+                ctx.ellipse(0, 7, 5, 13, 0, 0, 2 * Math.PI); ctx.fill();
+                ctx.fillStyle = "#b2dfdb";
+                ctx.fillRect(-3, -7, 6, 10);
+                ctx.fillStyle = "#455a64";
+                ctx.fillRect(-2, -11, 4, 4);
+                break;
+            case 3: // Puszka
+                ctx.fillStyle = "#bdbdbd";
+                ctx.beginPath();
+                ctx.ellipse(0, 7, 8, 8, 0, 0, 2 * Math.PI); ctx.fill();
+                ctx.fillStyle = "#78909c";
+                ctx.beginPath();
+                ctx.ellipse(0, 2, 7, 6, 0, 0, 2 * Math.PI); ctx.fill();
+                ctx.fillStyle = "#bcaaa4";
+                ctx.beginPath();
+                ctx.arc(0, 14, 6, 0, Math.PI, true);
+                ctx.fill();
+                break;
+        }
+        ctx.restore();
+    }
+
+    // Pociski
+    function drawBullets() {
+        bullets.forEach(bullet => {
+            ctx.save();
+            ctx.translate(bullet.x, bullet.y);
+            ctx.fillStyle = "#bdbdbd";
+            ctx.fillRect(-4, -14, 8, 16);
+            ctx.restore();
+        });
+    }
+
+    // Rysowanie wszystkich elementów
+    function drawPeople() {
+        people.forEach(drawPerson);
+        drawPerson(grassGuy);
+    }
+    function drawTrashes() {
+        trashes.forEach(drawTrash);
+    }
+
+    // Ruch koguta
+    function moveRooster() {
+        if (!gameActive) return;
+        let dx = 0;
+        if (keys['ArrowLeft']) dx = -rooster.speed;
+        if (keys['ArrowRight']) dx = rooster.speed;
+        let nx = rooster.x + dx;
+        let leftBound = 0; let rightBound = canvas.width;
+        rooster.x = Math.max(leftBound + rooster.size, Math.min(rightBound - rooster.size, nx));
+    }
+
+    // Ruch ludzi na jezdniach
+    function movePeople() {
+        if (!gameActive) return;
+        people.forEach(p => {
+            if (p.dir === 'right') {
+                p.x += p.speed;
+                if (p.x > canvas.width - 30) p.dir = 'left';
+            } else if (p.dir === 'left') {
+                p.x -= p.speed;
+                if (p.x < 30) p.dir = 'right';
+            }
+            p.y = horizontalStreets[p.street] + streetWidth / 2;
+            p.timer += 1;
+            if (!p.trash && p.timer > 100 + Math.random()*120) {
+                // Zawsze gazeta, banan, puszka (nie butelka)
+                let t = randomTrashType(2);
+                trashes.push({
+                    x: p.x + (Math.random()*18-9),
+                    y: p.y + 22,
+                    type: t,
+                    spawn: Date.now()
+                });
+                p.trash = true;
+                p.timer = 0;
+            }
+            if (p.trash && Math.random() < 0.03) {
+                p.trash = null;
+            }
+        });
+    }
+
+    // Ruch zielonego śmieciarza – zygzak i losowa zmiana kierunku
+    function moveGrassGuy() {
+        if (!gameActive) return;
+        // Możliwe kierunki: prawo, lewo, góra, dół, skosy
+        let dirs = [
+            {dx: 1, dy: 0},{dx: -1, dy: 0},{dx: 0, dy: 1},{dx: 0, dy: -1},
+            {dx: 0.7, dy: 0.7},{dx: -0.7, dy: -0.7},{dx: 0.7, dy: -0.7},{dx: -0.7, dy: 0.7}
+        ];
+        // Zmień kierunek co pewien czas (co 40-80 klatek)
+        grassGuy.changeDirTimer--;
+        if (grassGuy.changeDirTimer <= 0) {
+            grassGuy.dir = dirs[Math.floor(Math.random()*dirs.length)];
+            grassGuy.changeDirTimer = 40 + Math.random()*40;
+        }
+        grassGuy.x += grassGuy.dir.dx * grassGuy.speed;
+        grassGuy.y += grassGuy.dir.dy * grassGuy.speed;
+        // Ograniczenia do górnych 2 ulic (+/- trochę)
+        let minX = 20, maxX = canvas.width-20, minY = 20, maxY = horizontalStreets[1]+streetWidth+10;
+        if (grassGuy.x < minX) { grassGuy.x = minX; grassGuy.dir.dx *= -1; }
+        if (grassGuy.x > maxX) { grassGuy.x = maxX; grassGuy.dir.dx *= -1; }
+        if (grassGuy.y < minY) { grassGuy.y = minY; grassGuy.dir.dy *= -1; }
+        if (grassGuy.y > maxY) { grassGuy.y = maxY; grassGuy.dir.dy *= -1; }
+        // Wyrzucanie butelek
+        grassGuy.timer++;
+        if (!grassGuy.trash && grassGuy.timer > 60 + Math.random()*100) {
+            trashes.push({
+                x: grassGuy.x + (Math.random()*30-15),
+                y: grassGuy.y + (Math.random()*32-10),
+                type: 2,
+                spawn: Date.now()
+            });
+            grassGuy.trash = true;
+            grassGuy.timer = 0;
+        }
+        if (grassGuy.trash && Math.random() < 0.05) {
+            grassGuy.trash = null;
+        }
+    }
+
+    // Ruch pocisków
+    function moveBullets() {
+        if (!gameActive) return;
+        bullets.forEach(bullet => {
+            bullet.y -= 10;
+        });
+        bullets = bullets.filter(b => b.y > -20);
+    }
+
+    // Kolizje pocisków ze śmieciami + punktacja
+    function checkCollisions() {
+        if (!gameActive) return;
+        bullets.forEach((bullet, bIdx) => {
+            trashes.forEach((trash, tIdx) => {
+                let dx = bullet.x - trash.x;
+                let dy = bullet.y - trash.y;
+                if (Math.sqrt(dx*dx + dy*dy) < 22) {
+                    let pts = (trash.type === 2) ? 3 : 1;
+                    score += pts;
+                    trashes.splice(tIdx, 1);
+                    bullets.splice(bIdx, 1);
+                }
+            });
+        });
+    }
+
+    // Usuwanie śmieci po czasie
+    function cleanUpTrashes() {
+        let now = Date.now();
+        trashes = trashes.filter(trash => {
+            if (trash.type === 2) {
+                return (now - trash.spawn < 3000);
+            } else {
+                return (now - trash.spawn < 5000);
+            }
+        });
+    }
+
+    // Obsługa klawiatury
+    document.addEventListener('keydown', function(e) {
+        if (!gameActive) return;
+        keys[e.key] = true;
+        if (e.key === ' ') {
+            bullets.push({
+                x: rooster.x,
+                y: rooster.y - 28
+            });
+        }
+    });
+    document.addEventListener('keyup', function(e) {
+        keys[e.key] = false;
+    });
+
+    // Zegar i wyniki
+    function updateGameInfo() {
+        let info = `? <b>${timeLeft < 10 ? '0' : ''}${timeLeft}</b> s&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;?? Punkty: <b>${score}</b>`;
+        document.getElementById('game-info').innerHTML = info;
+    }
+
+    function updateResults() {
+        let html = "<b>Ostatnie wyniki:</b><br><ul style='list-style: none; padding:0;'>";
+        for (let i=0; i<results.length && i<10; i++) {
+            html += `<li>${i+1}. <b>${results[i]}</b> pkt</li>`;
+        }
+        html += "</ul>";
+        document.getElementById('results').innerHTML = html;
+    }
+
+    // Koniec gry
+    function endGame() {
+        gameActive = false;
+        results.unshift(score);
+        results = results.slice(0,10);
+        localStorage.setItem('rooster_scores', JSON.stringify(results));
+        updateResults();
+        document.getElementById('game-info').innerHTML += `<br><span style="color:#ffd600;"><b>Koniec gry!</b></span>`;
+        document.getElementById('newgame').style.display = 'block';
+    }
+
+    // Nowa gra
+    document.getElementById('newgame').onclick = function() {
+        score = 0;
+        timeLeft = 60;
+        gameActive = true;
+        trashes = [];
+        bullets = [];
+        resetPeople();
+        resetGrassGuy();
+        document.getElementById('newgame').style.display = 'none';
+        updateGameInfo();
+        setTimeout(timerTick, 1000);
+    };
+
+    // Rysowanie całej sceny
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawCity();
+        drawTrashes();
+        drawPeople();
+        drawRooster();
+        drawBullets();
+    }
+
+    // Główna pętla gry
+    function gameLoop() {
+        moveRooster();
+        movePeople();
+        moveGrassGuy();
+        moveBullets();
+        checkCollisions();
+        cleanUpTrashes();
+        draw();
+        updateGameInfo();
+        requestAnimationFrame(gameLoop);
+    }
+
+    // Odpalenie zegara
+    function timerTick() {
+        if (!gameActive) return;
+        timeLeft--;
+        updateGameInfo();
+        if (timeLeft <= 0) {
+            endGame();
+        } else {
+            setTimeout(timerTick, 1000);
+        }
+    }
+
+    // Inicjalizacja
+    updateResults();
+    setTimeout(timerTick, 1000);
+    gameLoop();
+
+
+});
+</script>
+
+</body>
+</html>
+
