@@ -1,6 +1,7 @@
 ﻿<!DOCTYPE html>
 <html lang="pl">
 <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta charset="UTF-8">
     <title>Brygada Brawurowych Kur kontra śmieciarze</title>
     <style>
@@ -15,6 +16,9 @@
             margin: 30px auto 0 auto;
         }
         #gameCanvas {
+            width: 100%;
+            height: auto;
+            max-width: 700px;
             display: block;
             margin: 0 auto;
             background: #b0bec5;
@@ -66,9 +70,10 @@
     <div id="game-info"></div>
     <canvas id="gameCanvas" width="700" height="500"></canvas>
     <div id="desc">
-        Miasto zostało opanowane przez złych śmieciarzy i pokonać ich może tylko załoga kurzego patrolu, na którego czele stoi kapitan Strzała!
+        Miasto zostało opanowane przez złych śmieciarzy. Tylko Brygada Brawurowych Kur może ich powstrzymać!
     </div>
-    <div id="instructions">
+    <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 20px;">
+<div id="instructions" style="flex:1;">
         <b>Instrukcja gry:</b><br>
         Steruj kurą (strzałki lewo/prawo).<br>
         Strzelaj spacją do śmieci.<br>
@@ -76,7 +81,8 @@
         Masz 60 sekund! Powodzenia, kapitanie Strzało!
     </div>
     <button id="newgame">Nowa gra</button>
-    <div id="results"></div>
+    </div>
+<div id="results" style="flex:1;"></div>
 </div>
 
 <script>
@@ -568,7 +574,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     function updateResults() {
         let html = "<b>Ostatnie wyniki:</b><br><ul style='list-style: none; padding:0;'>";
-        for (let i=0; i<results.length && i<10; i++) {
+        for (let i=0; i<results.length && i<5; i++) {
             html += `<li>${i+1}. <b>${results[i]}</b> pkt</li>`;
         }
         html += "</ul>";
@@ -579,7 +585,7 @@ document.addEventListener("DOMContentLoaded", function () {
     function endGame() {
         gameActive = false;
         results.unshift(score);
-        results = results.slice(0,10);
+        results = results.slice(0,5);
         localStorage.setItem('rooster_scores', JSON.stringify(results));
         updateResults();
         document.getElementById('game-info').innerHTML += `<br><span style="color:#ffd600;"><b>Koniec gry!</b></span>`;
@@ -641,9 +647,41 @@ document.addEventListener("DOMContentLoaded", function () {
     gameLoop();
 
 
+    // Ustaw kurę na środku
+    rooster.x = canvas.width / 2;
+
+    // Wyłącz sterowanie klawiszami
+    keys = {};
+
+    // Dotyk do przesuwania kury
+    canvas.addEventListener('touchmove', function (e) {
+        const rect = canvas.getBoundingClientRect();
+        const touchX = e.touches[0].clientX - rect.left;
+        rooster.x = Math.max(rooster.size, Math.min(canvas.width - rooster.size, touchX));
+    });
+
+
+    // Kliknięcie działa także w pionie (ze skalowaniem)
+    
+canvas.addEventListener("mousemove", function (e) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const mouseX = (e.clientX - rect.left) * scaleX;
+    rooster.x = Math.max(rooster.size, Math.min(canvas.width - rooster.size, mouseX));
+});
+canvas.addEventListener("click", function (e) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const clickX = (e.clientX - rect.left) * scaleX;
+        rooster.x = Math.max(rooster.size, Math.min(canvas.width - rooster.size, clickX));
+    bullets.push({
+        x: rooster.x,
+        y: rooster.y - 28
+    });
+    });
+
 });
 </script>
 
 </body>
 </html>
-
