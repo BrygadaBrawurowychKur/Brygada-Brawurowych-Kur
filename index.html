@@ -77,7 +77,7 @@
         <b>Instrukcja gry:</b><br>
         Steruj kurą (strzałki lewo/prawo).<br>
         Strzelaj spacją do śmieci.<br>
-        Punkty: butelka – 3 pkt, reszta – 1 pkt.<br>
+        Punkty: psia mina – 3 pkt, butelka – 2 pkt, reszta – 1 pkt.<br>
         Masz 60 sekund! Powodzenia, kapitanie Strzało!
     </div>
     <button id="newgame">Nowa gra</button>
@@ -111,9 +111,9 @@ document.addEventListener("DOMContentLoaded", function () {
     // Drzewa i krzaki
     const trees = [
         {x: 100, y: 340, size: 46, type: "tree"},
-        {x: 170, y: 410, size: 35, type: "bush"},
+        {x: 200, y: 360, size: 36, type: "bush"},
         {x: 600, y: 350, size: 44, type: "tree"},
-        {x: 655, y: 420, size: 40, type: "bush"}
+        {x: 570, y: 370, size: 34, type: "bush"}
     ];
 
     // Kogut
@@ -141,12 +141,12 @@ document.addEventListener("DOMContentLoaded", function () {
     let people;
     function resetPeople() {
         people = [
-            {x: 120, y: 100 + streetWidth / 2, dir: 'right', speed: 1.1, type: 0, timer: 0, trash: null, street: 0},
-            {x: 600, y: 100 + streetWidth / 2, dir: 'left', speed: 1.05, type: 1, timer: 80, trash: null, street: 0},
-            {x: 350, y: 100 + streetWidth / 2, dir: 'right', speed: 0.9, type: 2, timer: 120, trash: null, street: 0},
-            {x: 140, y: 250 + streetWidth / 2, dir: 'right', speed: 1.2, type: 3, timer: 0, trash: null, street: 1},
-            {x: 520, y: 250 + streetWidth / 2, dir: 'left', speed: 1.15, type: 4, timer: 170, trash: null, street: 1},
-            {x: 350, y: 250 + streetWidth / 2, dir: 'right', speed: 1.0, type: 1, timer: 210, trash: null, street: 1}
+                        {x: 350, y: 100 + streetWidth / 2, dir: 'right', speed: 0.9, type: 2, timer: 120, trash: null, street: 0},
+                        {x: 140, y: 250 + streetWidth / 2, dir: 'right', speed: 1.2, type: 3, timer: 0, trash: null, street: 1},
+                        {x: 520, y: 250 + streetWidth / 2, dir: 'left', speed: 1.15, type: 4, timer: 170, trash: null, street: 1},
+                        {x: 350, y: 250 + streetWidth / 2, dir: 'right', speed: 1.0, type: 1, timer: 210, trash: null, street: 1},
+                        {x: 60, y: 100 + streetWidth / 2, dir: 'right', speed: 0.9, type: 0, timer: 0, trash: null, street: 0},
+                        {x: 80, y: 100 + streetWidth / 2, dir: 'right', speed: 1.0, type: 2, timer: 0, trash: null, street: 0, withDog: true, dog: { poopTimer: 0 }}
         ];
     }
     resetPeople();
@@ -337,6 +337,13 @@ document.addEventListener("DOMContentLoaded", function () {
         ctx.translate(x, y);
         ctx.fillStyle = t.shirt;
         ctx.fillRect(-10, 0, 20, 28);
+        if (type === 5) {
+            ctx.fillStyle = "#66bb6a";
+            ctx.beginPath();
+            ctx.arc(0, 18, 10, 0, Math.PI * 2);  // brzuszek
+            ctx.fill();
+        }
+
         ctx.fillStyle = t.skin;
         ctx.beginPath();
         ctx.arc(0, -10, 12, 0, 2 * Math.PI);
@@ -345,6 +352,22 @@ document.addEventListener("DOMContentLoaded", function () {
         ctx.beginPath();
         ctx.arc(0, -14, 11, Math.PI, 2*Math.PI);
         ctx.fill();
+        if (type === 5) {
+            // Broda
+            ctx.fillStyle = "#3e2723";
+            ctx.beginPath();
+            ctx.arc(0, -4, 10, 0, Math.PI, false);
+            ctx.fill();
+
+            // Kapelusz (krzywo założony prostokąt)
+            ctx.save();
+            ctx.rotate(-0.3);
+            ctx.fillStyle = "#4e342e";
+            ctx.fillRect(-12, -24, 24, 6); // rondo
+            ctx.fillRect(-8, -32, 16, 10); // góra kapelusza
+            ctx.restore();
+        }
+
         ctx.strokeStyle = "#263238";
         ctx.lineWidth = 2.5;
         ctx.beginPath();
@@ -364,6 +387,12 @@ document.addEventListener("DOMContentLoaded", function () {
         ctx.save();
         ctx.translate(trash.x, trash.y);
         switch (trash.type) {
+            case 4: // Kupa psa
+                ctx.fillStyle = "#6d4c41";
+                ctx.beginPath();
+                ctx.moveTo(-4, 6); ctx.lineTo(0, -4); ctx.lineTo(4, 6); ctx.closePath();
+                ctx.fill();
+                break;
             case 0: // Gazeta
                 ctx.fillStyle = "#eee";
                 ctx.beginPath();
@@ -425,6 +454,29 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // Rysowanie wszystkich elementów
     function drawPeople() {
+        // Rysowanie psa ze smyczą i ogonkiem
+        people.forEach(p => {
+            if (p.withDog && p.dog) {
+                ctx.save();
+                ctx.translate(p.dog.x, p.dog.y);
+                ctx.fillStyle = "#795548";
+                ctx.beginPath();
+                ctx.arc(0, 0, 8, 0, Math.PI * 2); // ciało
+                ctx.fill();
+                ctx.fillStyle = "#5d4037";
+                ctx.fillRect(-3, -6, 6, 4); // ogonek
+                ctx.restore();
+
+                // Smycz
+                ctx.beginPath();
+                ctx.strokeStyle = "#8d6e63";
+                ctx.lineWidth = 1.5;
+                ctx.moveTo(p.x, p.y);
+                ctx.lineTo(p.dog.x, p.dog.y);
+                ctx.stroke();
+            }
+        });
+
         people.forEach(drawPerson);
         drawPerson(grassGuy);
     }
@@ -445,6 +497,24 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // Ruch ludzi na jezdniach
     function movePeople() {
+        // Obsługa psa i kupy
+        people.forEach(p => {
+            if (p.withDog && p.dog) {
+                p.dog.x = p.x - 20 + Math.random() * 4 - 2;
+                p.dog.y = p.y + 14 + Math.random() * 2;
+                p.dog.poopTimer++;
+                if (p.dog.poopTimer > 240) {
+                    trashes.push({
+                        x: p.dog.x,
+                        y: p.dog.y + 10,
+                        type: 4,
+                        spawn: Date.now()
+                    });
+                    p.dog.poopTimer = 0;
+                }
+            }
+        });
+
         if (!gameActive) return;
         people.forEach(p => {
             if (p.dir === 'right') {
@@ -498,7 +568,7 @@ document.addEventListener("DOMContentLoaded", function () {
         if (grassGuy.y > maxY) { grassGuy.y = maxY; grassGuy.dir.dy *= -1; }
         // Wyrzucanie butelek
         grassGuy.timer++;
-        if (!grassGuy.trash && grassGuy.timer > 60 + Math.random()*100) {
+        if (!grassGuy.trash && grassGuy.timer > 100 + Math.random()*120) {
             trashes.push({
                 x: grassGuy.x + (Math.random()*30-15),
                 y: grassGuy.y + (Math.random()*32-10),
@@ -530,7 +600,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 let dx = bullet.x - trash.x;
                 let dy = bullet.y - trash.y;
                 if (Math.sqrt(dx*dx + dy*dy) < 22) {
-                    let pts = (trash.type === 2) ? 3 : 1;
+                    let pts = (trash.type === 4) ? 3 : (trash.type === 2) ? 2 : 1;
                     score += pts;
                     trashes.splice(tIdx, 1);
                     bullets.splice(bIdx, 1);
